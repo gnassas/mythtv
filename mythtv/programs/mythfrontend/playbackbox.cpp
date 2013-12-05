@@ -2151,10 +2151,10 @@ bool PlaybackBox::UpdateUILists(void)
     }
 
     m_titleList = QStringList("");
-    if (m_progLists[m_partialGroupLabel].size() > 0)
-        m_titleList << m_partialGroupName;
     if (m_progLists[m_watchGroupLabel].size() > 0)
         m_titleList << m_watchGroupName;
+    if (m_progLists[m_partialGroupLabel].size() > 0)
+        m_titleList << m_partialGroupName;
     if ((m_progLists["livetv"].size() > 0) &&
         (!sortedList.values().contains(tr("Live TV"))))
         m_titleList << tr("Live TV");
