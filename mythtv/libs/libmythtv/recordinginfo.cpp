@@ -1054,7 +1054,7 @@ bool RecordingInfo::InsertProgram(RecordingInfo *pg,
         "   :STARS,    :REPEAT,                      :ORIGAIRDATE,      "
         "   :FINDID,   :TRANSCODER, :PLAYGROUP,      :RECPRIORITY,      "
         "   :BASENAME, :PROGSTART,  :PROGEND,        :PROFILE,          "
-        "   0,         :STORGROUP,  :INPUTNAME,      :RECGROUPID) "
+        "   1,         :STORGROUP,  :INPUTNAME,      :RECGROUPID) "
         );
 
     if (pg->rectype == kOverrideRecord)
