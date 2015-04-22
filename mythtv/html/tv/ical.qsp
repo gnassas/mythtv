@@ -1,7 +1,7 @@
 <%
 
     var myth = new Myth();
-    var masterBE = myth.GetSetting("", "", "").Settings.MasterServerIP;
+    var masterBE = myth.GetSetting("", "MasterServerIP", "")
     // perhaps SystemUUID would be a better choice?
 
 %>
