@@ -1,0 +1,43 @@
+<%
+
+    var myth = new Myth();
+    var masterBE = myth.GetSetting("", "MasterServerIP", "")
+    // perhaps SystemUUID would be a better choice?
+
+%>
+BEGIN:VCALENDAR
+PRODID:-//<% os.write(masterBE); %>//NONSGML MythTV//
+VERSION:2.0
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME;VALUE=TEXT:MythTV Upcoming Recordings
+<%
+
+    Date.prototype.asUTC = function() {
+        return String(this.getUTCFullYear()) +
+               String(101 + this.getUTCMonth()).substr(-2) +
+               String(100 + this.getUTCDate()).substr(-2) +
+               "T" +
+               String(100 + this.getUTCHours()).substr(-2) +
+               String(100 + this.getUTCMinutes()).substr(-2) +
+               String(100 + this.getUTCSeconds()).substr(-2) +
+               "Z";
+    };
+
+    var dvr = new Dvr();
+    var upcoming = dvr.GetUpcomingList(0, 0, false, 0, 0);
+
+    upcoming.Programs.forEach(function(prog) {
+        os.writeln("BEGIN:VEVENT");
+        os.writeln("SUMMARY:" + prog.Title);
+        os.writeln("DESCRIPTION:" + prog.Description);
+        os.writeln("UID:P" + prog.Channel.ChanId + "_" + prog.Recording.StartTs.asUTC());
+        os.writeln("DTSTAMP:" + prog.LastModified.asUTC());
+        os.writeln("LOCATION:" + [prog.Channel.ChannelName, prog.Recording.InputName].join(" / "));
+        os.writeln("DTSTART:" + prog.StartTime.asUTC());
+        os.writeln("DTEND:" + prog.EndTime.asUTC());
+        os.writeln("END:VEVENT");
+    });
+
+%>
+END:VCALENDAR
