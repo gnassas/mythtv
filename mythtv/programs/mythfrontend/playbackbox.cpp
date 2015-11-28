@@ -100,6 +100,21 @@ static int comp_originalAirDate_rev(const ProgramInfo *a, const ProgramInfo *b)
         return (dt1 > dt2 ? 1 : -1);
 }
 
+static int comp_bookmarkUpdate(const ProgramInfo *a, const ProgramInfo *b)
+{
+  QDateTime dt1 = a->QueryBookmarkTimeStamp();
+  QDateTime dt2 = b->QueryBookmarkTimeStamp();
+
+  if (dt1.isValid() && dt2.isValid())
+    return (dt1 < dt2 ? 1 : -1);
+  else if (dt1.isValid() && !dt2.isValid())
+    return -1;
+  else if (!dt1.isValid() && dt2.isValid())
+    return 1;
+  else
+    return -1;
+}
+
 static int comp_recpriority2(const ProgramInfo *a, const ProgramInfo *b)
 {
     if (a->GetRecordingPriority2() == b->GetRecordingPriority2())
@@ -172,6 +187,12 @@ static bool comp_originalAirDate_rev_less_than(
     const ProgramInfo *a, const ProgramInfo *b)
 {
     return comp_originalAirDate_rev(a, b) < 0;
+}
+
+static bool comp_bookmarkUpdate_less_than(
+    const ProgramInfo *a, const ProgramInfo *b)
+{
+    return comp_bookmarkUpdate(a, b) < 0;
 }
 
 static bool comp_recpriority2_less_than(
@@ -408,6 +429,8 @@ PlaybackBox::PlaybackBox(MythScreenStack *parent, QString name,
       m_recGroup("All Programs"),
       m_watchGroupName(tr("Watch List")),
       m_watchGroupLabel(m_watchGroupName.toLower()),
+      m_partialGroupName(tr("Watching List")),
+      m_partialGroupLabel(m_partialGroupName.toLower()),
       m_viewMask(VIEW_TITLES),
 
       // General m_popupMenu support
@@ -1714,6 +1737,15 @@ bool PlaybackBox::UpdateUILists(void)
                     continue;
                 }
 
+                if (!p->IsWatched() &&
+                    p->IsBookmarkSet() &&
+                    p->GetRecordingGroup() != "LiveTV" &&
+                    p->GetRecordingGroup() != "Deleted")
+                {
+                    m_progLists[m_partialGroupLabel].push_front(p);
+                    m_progLists[m_partialGroupLabel].setAutoDelete(false);
+                }
+
                 if ((m_viewMask & VIEW_TITLES) && // Show titles
                     ((p->GetRecordingGroup() != "LiveTV") ||
                      (m_recGroup == "LiveTV")))
@@ -1869,6 +1901,13 @@ bool PlaybackBox::UpdateUILists(void)
                                  comp_season_less_than);
             }
         }
+    }
+
+    if (!m_progLists[m_partialGroupLabel].empty())
+    {
+        std::stable_sort(m_progLists[m_partialGroupLabel].begin(),
+                         m_progLists[m_partialGroupLabel].end(),
+                         comp_bookmarkUpdate_less_than);
     }
 
     if (!m_progLists[m_watchGroupLabel].empty())
@@ -2114,6 +2153,8 @@ bool PlaybackBox::UpdateUILists(void)
     m_titleList = QStringList("");
     if (m_progLists[m_watchGroupLabel].size() > 0)
         m_titleList << m_watchGroupName;
+    if (m_progLists[m_partialGroupLabel].size() > 0)
+        m_titleList << m_partialGroupName;
     if ((m_progLists["livetv"].size() > 0) &&
         (!sortedList.values().contains(tr("Live TV"))))
         m_titleList << tr("Live TV");
