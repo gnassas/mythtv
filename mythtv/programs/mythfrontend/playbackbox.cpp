@@ -324,6 +324,22 @@ QString PlaybackBox::extract_job_state(const ProgramInfo &pginfo)
                  JOB_COMMFLAG,  pginfo.GetChanID(),
                  pginfo.GetRecordingStartTime()))
         job = "commflagging";
+    else if (JobQueue::IsJobQueuedOrRunning(
+                 JOB_USERJOB1,  pginfo.GetChanID(),
+                 pginfo.GetRecordingStartTime())
+             ||
+             JobQueue::IsJobQueuedOrRunning(
+                 JOB_USERJOB2,  pginfo.GetChanID(),
+                 pginfo.GetRecordingStartTime())
+             ||
+             JobQueue::IsJobQueuedOrRunning(
+                 JOB_USERJOB3,  pginfo.GetChanID(),
+                 pginfo.GetRecordingStartTime())
+             ||
+             JobQueue::IsJobQueuedOrRunning(
+                 JOB_USERJOB4,  pginfo.GetChanID(),
+                 pginfo.GetRecordingStartTime()))
+        job = "userjobbing";
 
     return job;
 }
