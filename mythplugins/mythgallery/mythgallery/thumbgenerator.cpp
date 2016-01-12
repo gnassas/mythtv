@@ -321,11 +321,9 @@ void ThumbGenerator::loadFile(QImage& image, const QFileInfo& fi)
 
         if (!thumbnailCreated)
         {
-            QImage *img = GetMythUI()->LoadScaleImage("gallery-moviethumb.png");
-            if (img)
-            {
-                image = *img;
-            }
+            QString movie("gallery-moviethumb.png");
+            if (GetMythUI()->FindThemeFile(movie))
+                image.load(movie);
         }
     }
     else
@@ -368,6 +366,14 @@ void ThumbGenerator::loadFile(QImage& image, const QFileInfo& fi)
 #endif
 
         image.load(fi.absoluteFilePath());
+
+        long rotateangle = GalleryUtil::GetNaturalRotation(fi.absoluteFilePath());
+        if (rotateangle != 0)
+        {
+            QMatrix matrix;
+            matrix.rotate(rotateangle);
+            image = image.transformed(matrix, Qt::SmoothTransformation);
+        }
     }
 }
 

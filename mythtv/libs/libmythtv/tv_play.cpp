@@ -10,7 +10,7 @@
 #include <algorithm>
 using namespace std;
 
-#include <QCoreApplication>
+#include <QApplication>
 #include <QKeyEvent>
 #include <QRunnable>
 #include <QRegExp>
@@ -452,7 +452,9 @@ bool TV::StartTV(ProgramInfo *tvrec, uint flags,
     }
 
     LOG(VB_PLAYBACK, LOG_INFO, LOC + "-- process events 2 begin");
-    qApp->processEvents();
+    do
+        qApp->processEvents();
+    while (tv->isEmbedded);
     LOG(VB_PLAYBACK, LOG_INFO, LOC + "-- process events 2 end");
 
     // check if the show has reached the end.
@@ -3031,8 +3033,12 @@ void TV::timerEvent(QTimerEvent *te)
         {
             OSD *osd = GetOSDLock(actx);
             if (osd && !osd->IsWindowVisible("osd_input"))
+            {
+                ReturnOSDLock(actx, osd);
                 CommitQueuedInput(actx);
-            ReturnOSDLock(actx, osd);
+            }
+            else
+                ReturnOSDLock(actx, osd);
         }
         ReturnPlayerLock(actx);
 
@@ -3363,11 +3369,6 @@ void TV::PrepareToExitPlayer(PlayerContext *ctx, int line, BookmarkAction bookma
         }
         if (db_auto_set_watched)
             ctx->player->SetWatched();
-
-        if (ctx->player->GetAudio()->ControlsVolume())
-        {
-            ctx->player->SaveVolume();
-        }
     }
     ctx->UnlockDeletePlayer(__FILE__, line);
 }
@@ -8631,7 +8632,15 @@ bool TV::StartEmbedding(const QRect &embedRect)
     if (!ctx)
         return false;
 
-    WId wid = GetMythMainWindow()->GetPaintWindow()->winId();
+    WId wid;
+#if QT_VERSION >= QT_VERSION_CHECK(5,0,0)
+    // BUG: With Qt5.4/EGLFS, winId() causes a SEGV when using OpenMAX video.
+    // PlayerContext::StartEmbedding ignores wid so set it to 0.
+    if (qApp->platformName().contains("egl"))
+        wid = 0;
+    else
+#endif
+    wid = GetMythMainWindow()->GetPaintWindow()->winId();
 
     if (!ctx->IsNullVideoDesired())
         ctx->StartEmbedding(wid, embedRect);
@@ -8739,6 +8748,10 @@ vector<bool> TV::DoSetPauseState(PlayerContext *lctx, const vector<bool> &pause)
 
 void TV::DoEditSchedule(int editType)
 {
+    // Prevent nesting of the pop-up UI
+    if (ignoreKeyPresses)
+        return;
+
     if ((editType == kScheduleProgramGuide  && !RunProgramGuidePtr) ||
         (editType == kScheduleProgramFinder && !RunProgramFinderPtr) ||
         (editType == kScheduledRecording    && !RunScheduleEditorPtr) ||
@@ -9833,14 +9846,14 @@ void TV::customEvent(QEvent *e)
         DoSetPauseState(actx, saved_pause); // Restore pause states
         disableDrawUnusedRects = false;
 
-        qApp->processEvents();
-
         if (!weDisabledGUI)
         {
             weDisabledGUI = true;
             GetMythMainWindow()->PushDrawDisabled();
-            DrawUnusedRects();
         }
+
+        qApp->processEvents();
+        DrawUnusedRects();
 
         isEmbedded = false;
         ignoreKeyPresses = false;
@@ -10036,6 +10049,17 @@ void TV::HandleOSDClosed(int osdType)
             break;
         case kOSDFunctionalType_AudioSyncAdjust:
             audiosyncAdjustment = false;
+            {
+            PlayerContext *ctx = GetPlayerReadLock(0, __FILE__, __LINE__);
+            ctx->LockDeletePlayer(__FILE__, __LINE__);
+            if (ctx->player)
+            {
+                int64_t aoff = ctx->player->GetAudioTimecodeOffset();
+                gCoreContext->SaveSetting("AudioSyncOffset", QString::number(aoff));
+            }
+            ctx->UnlockDeletePlayer(__FILE__, __LINE__);
+            ReturnPlayerLock(ctx);
+            }
             break;
         case kOSDFunctionalType_SubtitleZoomAdjust:
             subtitleZoomAdjustment = false;
@@ -12060,8 +12084,8 @@ bool TV::MenuItemDisplayPlayback(const MenuItemContext &c)
         {
             uint max_cnt = min(kMaxPBPCount, kMaxPIPCount+1);
             if (player.size() <= max_cnt &&
-                !(m_tvm_hasPIP && !m_tvm_allowPBP) &&
-                !(m_tvm_hasPBP && !m_tvm_allowPIP))
+                ((m_tvm_hasPIP && m_tvm_allowPBP) ||
+                    (m_tvm_hasPBP && m_tvm_allowPIP)) )
             {
                 active = !m_tvm_hasPBP;
                 BUTTON2(actionName, tr("Switch to PBP"), tr("Switch to PIP"));
@@ -13425,7 +13449,7 @@ void TV::HandleSaveLastPlayPosEvent(void)
                 start(new PositionSaver(*ctx->playingInfo, framesPlayed),
                       "PositionSaver");
         }
-        ReturnPlayerLock(ctx);
+        ctx->UnlockDeletePlayer(__FILE__, __LINE__);
     }
     ReturnPlayerLock(mctx);
 

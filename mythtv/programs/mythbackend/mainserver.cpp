@@ -30,6 +30,7 @@ using namespace std;
 #include <QFile>
 #include <QDir>
 #include <QWaitCondition>
+#include <QWriteLocker>
 #include <QRegExp>
 #include <QEvent>
 #include <QUrl>
@@ -74,9 +75,7 @@ using namespace std;
 #include "filesysteminfo.h"
 #include "metaio.h"
 #include "musicmetadata.h"
-#include "imagescanner.h"
-#include "imagethumbs.h"
-#include "imagehandlers.h"
+#include "imagemanager.h"
 #include "cardutil.h"
 
 // mythbackend headers
@@ -169,7 +168,7 @@ class ProcessRequestRunnable : public QRunnable
 class FreeSpaceUpdater : public QRunnable
 {
   public:
-    FreeSpaceUpdater(MainServer &parent) :
+    explicit FreeSpaceUpdater(MainServer &parent) :
         m_parent(parent), m_dorun(true), m_running(true)
     {
         m_lastRequest.start();
@@ -467,6 +466,8 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     PlaybackSock *pbs = GetPlaybackBySock(sock);
     if (pbs)
         pbs->IncrRef();
+
+    bool bIsControl = (pbs) ? false : controlSocketList.contains(sock);
     sockListLock.unlock();
 
     QStringList listline;
@@ -479,6 +480,11 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
             return;
         }
         pbs->DecrRef();
+    }
+    else if (!bIsControl)
+    {
+        // The socket has been disconnected
+        return;
     }
     else if (!sock->ReadStringList(listline) || listline.empty())
     {
@@ -610,6 +616,13 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
             SendErrorResponse(pbs, "Bad DELETE_FILE command");
         else
             HandleDeleteFile(listline, pbs);
+    }
+    else if (command == "MOVE_FILE")
+    {
+        if (listline.size() < 4)
+            SendErrorResponse(pbs, "Bad MOVE_FILE command");
+        else
+            HandleMoveFile(pbs, listline[1], listline[2], listline[3]);
     }
     else if (command == "STOP_RECORDING")
     {
@@ -907,15 +920,29 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     }
     else if (command == "IMAGE_SCAN")
     {
-        QStringList reply = ImageScan::getInstance()->HandleScanRequest(listline);
+        // Expects command
+        QStringList reply = (listline.size() == 2)
+                ? ImageManagerBe::getInstance()->HandleScanRequest(listline[1])
+                : QStringList("ERROR") << "Bad: " << listline;
+
+        SendResponse(pbs->getSocket(), reply);
+    }
+    else if (command == "IMAGE_COPY")
+    {
+        // Expects at least 1 comma-delimited image definition
+        QStringList reply = (listline.size() >= 2)
+                ? ImageManagerBe::getInstance()->HandleDbCreate(listline.mid(1))
+                : QStringList("ERROR") << "Bad: " << listline;
+
         SendResponse(pbs->getSocket(), reply);
     }
     else if (command == "IMAGE_MOVE")
     {
-        // Expects destination dir id, comma-delimited dir/file ids
-        QStringList reply = (listline.size() == 3)
-                         ? ImageHandler::HandleMove(listline[1], listline[2])
-                         : QStringList("ERROR") << "Bad IMAGE_MOVE";
+        // Expects comma-delimited dir/file ids, path to replace, new path
+        QStringList reply = (listline.size() == 4)
+                ? ImageManagerBe::getInstance()->
+                  HandleDbMove(listline[1], listline[2], listline[3])
+                : QStringList("ERROR") << "Bad: " << listline;
 
         SendResponse(pbs->getSocket(), reply);
     }
@@ -923,8 +950,8 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     {
         // Expects comma-delimited dir/file ids
         QStringList reply = (listline.size() == 2)
-                ? ImageHandler::HandleDelete(listline[1])
-                : QStringList("ERROR") << "Bad IMAGE_DELETE";
+                ? ImageManagerBe::getInstance()->HandleDelete(listline[1])
+                : QStringList("ERROR") << "Bad: " << listline;
 
         SendResponse(pbs->getSocket(), reply);
     }
@@ -932,8 +959,9 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     {
         // Expects hide flag, comma-delimited file/dir ids
         QStringList reply = (listline.size() == 3)
-                ? ImageHandler::HandleHide(listline[1].toInt(), listline[2])
-                : QStringList("ERROR") << "Bad IMAGE_HIDE";
+                ? ImageManagerBe::getInstance()->
+                  HandleHide(listline[1].toInt(), listline[2])
+                : QStringList("ERROR") << "Bad: " << listline;
 
         SendResponse(pbs->getSocket(), reply);
     }
@@ -941,8 +969,9 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     {
         // Expects transformation, write file flag,
         QStringList reply = (listline.size() == 3)
-                ? ImageHandler::HandleTransform(listline[1].toInt(), listline[2])
-                : QStringList("ERROR") << "Bad IMAGE_TRANSFORM";
+                ? ImageManagerBe::getInstance()->
+                  HandleTransform(listline[1].toInt(), listline[2])
+                : QStringList("ERROR") << "Bad: " << listline;
 
         SendResponse(pbs->getSocket(), reply);
     }
@@ -950,17 +979,18 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     {
         // Expects file/dir id, new basename
         QStringList reply = (listline.size() == 3)
-                ? ImageHandler::HandleRename(listline[1], listline[2])
-                : QStringList("ERROR") << "Bad IMAGE_RENAME";
+                ? ImageManagerBe::getInstance()->HandleRename(listline[1], listline[2])
+                : QStringList("ERROR") << "Bad: " << listline;
 
         SendResponse(pbs->getSocket(), reply);
     }
     else if (command == "IMAGE_CREATE_DIRS")
     {
-        // Expects list of dir names
-        QStringList reply = (listline.size() == 2)
-                ? ImageHandler::HandleDirs(listline[1].split(","))
-                : QStringList("ERROR") << "Bad IMAGE_CREATE_DIRS";
+        // Expects destination path, rescan flag, list of dir names
+        QStringList reply = (listline.size() >= 4)
+                ? ImageManagerBe::getInstance()->
+                  HandleDirs(listline[1], listline[2].toInt(), listline.mid(3))
+                : QStringList("ERROR") << "Bad: " << listline;
 
         SendResponse(pbs->getSocket(), reply);
     }
@@ -968,17 +998,9 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     {
         // Expects dir id, cover id. Cover id of 0 resets dir to use its own
         QStringList reply = (listline.size() == 3)
-                ? ImageHandler::HandleCover(listline[1].toInt(), listline[2].toInt())
-                : QStringList("ERROR") << "Bad IMAGE_COVER";
-
-        SendResponse(pbs->getSocket(), reply);
-    }
-    else if (command == "IMAGE_GET_METADATA")
-    {
-        // Expects "IMAGE_GET_METADATA", image id
-        QStringList reply = (listline.size() == 2)
-                ? ImageHandler::HandleGetMetadata(listline[1])
-                : QStringList("ERROR") << "Bad IMAGE_GET_METADATA";
+                ? ImageManagerBe::getInstance()->
+                  HandleCover(listline[1].toInt(), listline[2].toInt())
+                : QStringList("ERROR") << "Bad: " << listline;
 
         SendResponse(pbs->getSocket(), reply);
     }
@@ -986,8 +1008,8 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     {
         // Expects list of exclusion patterns
         QStringList reply = (listline.size() == 2)
-                ? ImageHandler::HandleIgnore(listline[1])
-                : QStringList("ERROR") << "Bad IMAGE_IGNORE";
+                ? ImageManagerBe::getInstance()->HandleIgnore(listline[1])
+                : QStringList("ERROR") << "Bad: " << listline;
 
         SendResponse(pbs->getSocket(), reply);
     }
@@ -1386,7 +1408,10 @@ void MainServer::customEvent(QEvent *e)
             return;
 
         if (me->Message() == "CREATE_THUMBNAILS")
-            ImageThumb::getInstance()->HandleCreateThumbnails(me->ExtraDataList());
+            ImageManagerBe::getInstance()->HandleCreateThumbnails(me->ExtraDataList());
+
+        if (me->Message() == "IMAGE_GET_METADATA")
+            ImageManagerBe::getInstance()->HandleGetMetadata(me->ExtraData());
 
         MythEvent mod_me("");
         if (me->Message().startsWith("MASTER_UPDATE_REC_INFO"))
@@ -1572,7 +1597,7 @@ void MainServer::HandleVersion(MythSocket *socket, const QStringList &slist)
     }
 
     QString token = slist[2];
-    if (token != MYTH_PROTO_TOKEN)
+    if (token != QString::fromUtf8(MYTH_PROTO_TOKEN))
     {
         LOG(VB_GENERAL, LOG_CRIT, LOC +
             QString("MainServer::HandleVersion - Client sent incorrect "
@@ -1654,25 +1679,30 @@ void MainServer::HandleAnnounce(QStringList &slist, QStringList commands,
             socket->WriteStringList(errlist);
             return;
         }
+
         // Monitor connections are same as Playback but they don't
         // block shutdowns. See the Scheduler event loop for more.
 
         PlaybackSockEventsMode eventsMode =
             (PlaybackSockEventsMode)commands[3].toInt();
-        LOG(VB_NETWORK, LOG_INFO, LOC + QString("MainServer::ANN %1")
-                                            .arg(commands[1]));
-        LOG(VB_NETWORK, LOG_INFO, LOC +
-            QString("adding: %1 as a client (events: %2)")
-                .arg(commands[2]).arg(eventsMode));
+
+        QWriteLocker lock(&sockListLock);
+        if (!controlSocketList.remove(socket))
+            return; // socket was disconnected
         PlaybackSock *pbs = new PlaybackSock(this, socket, commands[2],
                                              eventsMode);
+        playbackList.push_back(pbs);
+        lock.unlock();
+
+        LOG(VB_GENERAL, LOG_INFO, LOC + QString("MainServer::ANN %1")
+                                      .arg(commands[1]));
+        LOG(VB_GENERAL, LOG_INFO, LOC +
+            QString("adding: %1(%2) as a client (events: %3)")
+                                      .arg(commands[2])
+                                      .arg(quintptr(socket),0,16)
+                                      .arg(eventsMode));
         pbs->setBlockShutdown((commands[1] == "Playback") ||
                               (commands[1] == "Frontend"));
-
-        sockListLock.lockForWrite();
-        controlSocketList.remove(socket);
-        playbackList.push_back(pbs);
-        sockListLock.unlock();
 
         if (commands[1] == "Frontend")
         {
@@ -1704,14 +1734,15 @@ void MainServer::HandleAnnounce(QStringList &slist, QStringList commands,
             return;
         }
 
+        QWriteLocker lock(&sockListLock);
+        if (!controlSocketList.remove(socket))
+            return; // socket was disconnected
         PlaybackSock *pbs = new PlaybackSock(this, socket, commands[2],
                                               kPBSEvents_Normal);
         pbs->setAsMediaServer();
         pbs->setBlockShutdown(false);
-        sockListLock.lockForWrite();
-        controlSocketList.remove(socket);
         playbackList.push_back(pbs);
-        sockListLock.unlock();
+        lock.unlock();
 
         gCoreContext->SendSystemEvent(
             QString("CLIENT_CONNECTED HOSTNAME %1").arg(commands[2]));
@@ -1728,11 +1759,17 @@ void MainServer::HandleAnnounce(QStringList &slist, QStringList commands,
             return;
         }
 
+        QWriteLocker lock(&sockListLock);
+        if (!controlSocketList.remove(socket))
+            return; // socket was disconnected
+        PlaybackSock *pbs = new PlaybackSock(this, socket, commands[2],
+                                             kPBSEvents_None);
+        playbackList.push_back(pbs);
+        lock.unlock();
+
         LOG(VB_GENERAL, LOG_INFO, LOC +
             QString("adding: %1 as a slave backend server")
                                .arg(commands[2]));
-        PlaybackSock *pbs = new PlaybackSock(this, socket, commands[2],
-                                             kPBSEvents_None);
         pbs->setAsSlaveBackend();
         pbs->setIP(commands[3]);
 
@@ -1775,11 +1812,6 @@ void MainServer::HandleAnnounce(QStringList &slist, QStringList commands,
         gCoreContext->dispatch(me);
 
         pbs->setBlockShutdown(false);
-
-        sockListLock.lockForWrite();
-        controlSocketList.remove(socket);
-        playbackList.push_back(pbs);
-        sockListLock.unlock();
 
         autoexpireUpdateTimer->start(1000);
 
@@ -1905,11 +1937,19 @@ void MainServer::HandleAnnounce(QStringList &slist, QStringList commands,
                     return;
                 }
             }
+            QWriteLocker lock(&sockListLock);
+            if (!controlSocketList.remove(socket))
+                return; // socket was disconnected
             ft = new FileTransfer(filename, socket, writemode);
+            fileTransferList.push_back(ft);
         }
         else
         {
+            QWriteLocker lock(&sockListLock);
+            if (!controlSocketList.remove(socket))
+                return; // socket was disconnected
             ft = new FileTransfer(filename, socket, usereadahead, timeout_ms);
+            fileTransferList.push_back(ft);
         }
 
         if (!ft->isOpen())
@@ -1923,10 +1963,6 @@ void MainServer::HandleAnnounce(QStringList &slist, QStringList commands,
             return;
         }
         ft->IncrRef();
-        sockListLock.lockForWrite();
-        controlSocketList.remove(socket);
-        fileTransferList.push_back(ft);
-        sockListLock.unlock();
 
         retlist << QString::number(socket->GetSocketDescriptor());
         retlist << QString::number(ft->GetFileSize());
@@ -5158,6 +5194,80 @@ void MainServer::GetFilesystemInfos(QList<FileSystemInfo> &fsInfos)
     }
 }
 
+void MainServer::HandleMoveFile(PlaybackSock *pbs, const QString &storagegroup,
+                                const QString &src, const QString &dst)
+{
+    StorageGroup sgroup(storagegroup, "", false);
+    QStringList retlist;
+
+    if (src.isEmpty() || dst.isEmpty()
+        || src.contains("..") || dst.contains(".."))
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC +
+            QString("HandleMoveFile: ERROR moving file '%1' -> '%2', "
+                    "a path fails sanity checks").arg(src, dst));
+        retlist << "0" << "Invalid path";
+        SendResponse(pbs->getSocket(), retlist);
+        return;
+    }
+
+    QString srcAbs = sgroup.FindFile(src);
+    if (srcAbs.isEmpty())
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC +
+            QString("HandleMoveFile: Unable to find %1").arg(src));
+        retlist << "0" << "Source file not found";
+        SendResponse(pbs->getSocket(), retlist);
+        return;
+    }
+
+    // Path of files must be unique within SG. Rename will permit <sgdir1>/<dst>
+    // even when <sgdir2>/<dst> already exists.
+    // Directory paths do not have to be unique.
+    QString dstAbs = sgroup.FindFile(dst);
+    if (!dstAbs.isEmpty() && QFileInfo(dstAbs).isFile())
+    {
+        LOG(VB_GENERAL, LOG_ERR, LOC +
+            QString("HandleMoveFile: Destination exists at %1").arg(dstAbs));
+        retlist << "0" << "Destination file exists";
+        SendResponse(pbs->getSocket(), retlist);
+        return;
+    }
+
+    // Files never move filesystems, so use current SG dir
+    int sgPathSize = srcAbs.size() - src.size();
+    dstAbs = srcAbs.mid(0, sgPathSize) + dst;
+
+    // Renaming on same filesystem should always be fast but is liable to delays
+    // for unknowable reasons so we delegate to a separate thread for safety.
+    RenameThread *renamer = new RenameThread(*this, *pbs, srcAbs, dstAbs);
+    MThreadPool::globalInstance()->start(renamer, "Rename");
+}
+
+QMutex RenameThread::m_renamelock;
+
+void RenameThread::run()
+{
+    // Only permit one rename to run at any time
+    QMutexLocker lock(&m_renamelock);
+    LOG(VB_FILE, LOG_INFO, QString("MainServer::RenameThread: Renaming %1 -> %2")
+        .arg(m_src, m_dst));
+
+    QStringList retlist;
+    QFileInfo   fi(m_dst);
+
+    if (QDir().mkpath(fi.path()) && QFile::rename(m_src, m_dst))
+    {
+        retlist << "1";
+    }
+    else
+    {
+        retlist << "0" << "Rename failed";
+        LOG(VB_FILE, LOG_ERR, "MainServer::DoRenameThread: Rename failed");
+    }
+    m_ms.SendResponse(m_pbs.getSocket(), retlist);
+}
+
 void TruncateThread::run(void)
 {
     if (m_ms)
@@ -7389,7 +7499,7 @@ void MainServer::deferredDeleteSlot(void)
     DeferredDeleteStruct dds = deferredDeleteList.front();
     while (dds.ts.secsTo(MythDate::current()) > 30)
     {
-        delete dds.sock;
+        dds.sock->DecrRef();
         deferredDeleteList.pop_front();
         if (deferredDeleteList.empty())
             return;
@@ -7510,6 +7620,10 @@ void MainServer::connectionClosed(MythSocket *socket)
                 }
             }
 
+            LOG(VB_GENERAL, LOG_INFO, QString("%1 sock(%2) '%3' disconnected")
+                .arg(pbs->getBlockShutdown() ? "Playback" : "Monitor")
+                .arg(quintptr(socket),0,16)
+                .arg(pbs->getHostname()) );
             pbs->SetDisconnected();
             playbackList.erase(it);
 
@@ -7536,6 +7650,8 @@ void MainServer::connectionClosed(MythSocket *socket)
         MythSocket *sock = (*ft)->getSocket();
         if (sock == socket)
         {
+            LOG(VB_GENERAL, LOG_INFO, QString("FileTransfer sock(%1) disconnected")
+                .arg(quintptr(socket),0,16) );
             (*ft)->DecrRef();
             fileTransferList.erase(ft);
             sockListLock.unlock();
@@ -7546,6 +7662,8 @@ void MainServer::connectionClosed(MythSocket *socket)
     QSet<MythSocket*>::iterator cs = controlSocketList.find(socket);
     if (cs != controlSocketList.end())
     {
+        LOG(VB_GENERAL, LOG_INFO, QString("Control sock(%1) disconnected")
+            .arg(quintptr(socket),0,16) );
         (*cs)->DecrRef();
         controlSocketList.erase(cs);
         sockListLock.unlock();

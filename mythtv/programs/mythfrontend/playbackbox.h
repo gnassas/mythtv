@@ -585,7 +585,7 @@ class HelpPopup : public MythScreenType
     Q_OBJECT
 
   public:
-    HelpPopup(MythScreenStack *lparent);
+    explicit HelpPopup(MythScreenStack *lparent);
 
     bool Create(void);
 

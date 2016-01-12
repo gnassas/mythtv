@@ -54,8 +54,8 @@ HEADERS += videoglobalsettings.h        upnpscanner.h
 HEADERS += commandlineparser.h          idlescreen.h
 HEADERS += gallerythumbview.h           galleryslideview.h
 HEADERS += galleryconfig.h              galleryviews.h
-HEADERS += gallerycommhelper.h          gallerytransitions.h
-HEADERS += galleryslide.h
+HEADERS += galleryslide.h               gallerytransitions.h
+HEADERS += galleryinfo.h
 
 SOURCES += main.cpp playbackbox.cpp viewscheduled.cpp audiogeneralsettings.cpp
 SOURCES += globalsettings.cpp manualschedule.cpp programrecpriority.cpp
@@ -79,8 +79,8 @@ SOURCES += videoglobalsettings.cpp      upnpscanner.cpp
 SOURCES += commandlineparser.cpp        idlescreen.cpp
 SOURCES += gallerythumbview.cpp         galleryslideview.cpp
 SOURCES += galleryconfig.cpp            galleryviews.cpp
-SOURCES += gallerycommhelper.cpp        gallerytransitions.cpp
-SOURCES += galleryslide.cpp
+SOURCES += galleryslide.cpp             gallerytransitions.cpp
+SOURCES += galleryinfo.cpp
 
 HEADERS += serviceHosts/frontendServiceHost.h
 HEADERS += services/frontend.h
@@ -123,6 +123,7 @@ using_pulseoutput: DEFINES += USING_PULSEOUTPUT
 using_alsa:DEFINES += USING_ALSA
 using_jack:DEFINES += USING_JACK
 using_oss: DEFINES += USING_OSS
+using_openmax: DEFINES += USING_OPENMAX
 macx:      DEFINES += USING_COREAUDIO
 using_libdns_sd {
     DEFINES += USING_LIBDNS_SD
@@ -142,7 +143,6 @@ android {
     ANDROID_EXTRA_LIBS += $$(MYTHINSTALLLIBCOMMON)libmythswscale.so
     ANDROID_EXTRA_LIBS += $$(MYTHINSTALLLIBCOMMON)libmythavcodec.so
     ANDROID_EXTRA_LIBS += $$(MYTHINSTALLLIBCOMMON)libmythavformat.so
-    ANDROID_EXTRA_LIBS += $$(MYTHINSTALLLIB)libmythqjson.so
     ANDROID_EXTRA_LIBS += $$(MYTHINSTALLLIB)libmythbase-0.28.so
     ANDROID_EXTRA_LIBS += $$(MYTHINSTALLLIB)libmythui-0.28.so
     ANDROID_EXTRA_LIBS += $$(MYTHINSTALLLIB)libmythservicecontracts-0.28.so

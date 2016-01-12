@@ -1,18 +1,17 @@
 //! \file
 //! \brief Provides Gallery configuration screens
-//!
 
 #ifndef GALLERYCONFIG_H
 #define GALLERYCONFIG_H
 
-#include <mythconfigdialogs.h>
-#include <mythconfiggroups.h>
-#include "gallerycommhelper.h"
+#include "mythconfigdialogs.h"
+#include "mythconfiggroups.h"
 
 
 //! Settings page 1
 class GallerySettings : public VerticalConfigurationGroup
 {
+    Q_OBJECT
 public:
     GallerySettings();
 };
@@ -23,10 +22,10 @@ class DatabaseSettings : public VerticalConfigurationGroup
 {
     Q_OBJECT
 public:
-    DatabaseSettings(bool enable);
+    explicit DatabaseSettings(bool enable);
 
-private slots:
-    void ClearDb()    { GalleryBERequest::ClearDatabase(); }
+signals:
+    void ClearDbPressed();
 };
 
 
@@ -34,12 +33,44 @@ private slots:
 class GalleryConfig : public ConfigurationWizard
 {
 public:
-    GalleryConfig(bool editMode)
+    explicit GalleryConfig(bool editMode)
     {
         addChild(new GallerySettings());
-        addChild(new DatabaseSettings(editMode));
+        m_dbGroup = new DatabaseSettings(editMode);
+        addChild(m_dbGroup);
     }
+
+    DatabaseSettings *GetClearPage() { return m_dbGroup; }
+
+private:
+    DatabaseSettings *m_dbGroup;
 };
 
+
+//! Settings for Thumbnail view
+class ThumbSettings : public VerticalConfigurationGroup
+{
+    Q_OBJECT
+public:
+    ThumbSettings();
+};
+
+
+//! Settings for Slideshow view
+class SlideSettings : public VerticalConfigurationGroup
+{
+    Q_OBJECT
+public:
+    SlideSettings();
+};
+
+
+//! Settings for Import 
+class ImportSettings : public VerticalConfigurationGroup
+{
+    Q_OBJECT
+public:
+    explicit ImportSettings(bool enable);
+};
 
 #endif // GALLERYCONFIG_H

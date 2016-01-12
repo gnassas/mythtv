@@ -400,7 +400,6 @@ class MTV_PUBLIC MythPlayer
     // Audio Sets
     uint AdjustVolume(int change)           { return audio.AdjustVolume(change); }
     uint SetVolume(int newvolume)           { return audio.SetVolume(newvolume); }
-    void SaveVolume(void)                   { audio.SaveVolume(); }
     bool SetMuted(bool mute)                { return audio.SetMuted(mute);       }
     MuteState SetMuteState(MuteState state) { return audio.SetMuteState(state);  }
     MuteState IncrMuteState(void)           { return audio.IncrMuteState();      }
@@ -833,6 +832,7 @@ class MTV_PUBLIC MythPlayer
     int        prevrp;        ///< repeat_pict of last frame
     int64_t    tc_wrap[TCTYPESMAX];
     int64_t    tc_lastval[TCTYPESMAX];
+    int64_t    savedAudioTimecodeOffset;
 
     // LiveTV
     TV *m_tv;

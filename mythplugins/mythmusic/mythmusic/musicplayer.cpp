@@ -270,7 +270,6 @@ void MusicPlayer::stop(bool stopAll)
 
     if (m_output)
     {
-        saveVolume();
         if (m_output->IsPaused())
             pause();
         m_output->Reset();
@@ -600,6 +599,7 @@ void MusicPlayer::customEvent(QEvent *event)
         if (getCurrentMetadata())
         {
             mdata->setID(getCurrentMetadata()->ID());
+            mdata->setHostname(gCoreContext->GetMasterHostName());
             mdata->setTrack(m_playedList.count() + 1);
             mdata->setStation(getCurrentMetadata()->Station());
             mdata->setChannel(getCurrentMetadata()->Channel());
@@ -1423,12 +1423,6 @@ uint MusicPlayer::getVolume(void) const
     if (m_output)
         return m_output->GetCurrentVolume();
     return 0;
-}
-
-void MusicPlayer::saveVolume(void)
-{
-    if (m_output)
-        m_output->SaveCurrentVolume();
 }
 
 void MusicPlayer::toggleMute(void)
