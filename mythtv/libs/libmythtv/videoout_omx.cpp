@@ -1,3 +1,14 @@
+#ifdef USING_OPENGLES
+#define OSD_EGL // OSD with EGL
+#endif
+
+#ifdef OSD_EGL /* includes QJson with enum value named Bool, must go before EGL/egl.h */
+# include "mythpainter_ogl.h"
+#endif //def OSD_EGL
+
+/* must go before X11/X.h due to #define None 0L */
+#include "privatedecoder_omx.h" // For PrivateDecoderOMX::s_name
+
 #include "videoout_omx.h"
 
 #include <cstddef>
@@ -14,10 +25,6 @@
 #include <bcm_host.h>
 #endif
 
-#ifdef USING_OPENGLES
-#define OSD_EGL // OSD with EGL
-#endif
-
 #ifdef OSD_EGL
 #include <EGL/egl.h>
 #include <QtGlobal>
@@ -31,7 +38,9 @@
 # define LOC QString("EGL: ")
 # include "mythrender_opengl2es.h"
 # undef LOC
-# include "mythpainter_ogl.h"
+# if 0 /* moved to top so it goes before X11/Xlib.h which is included via EGL/egl.h on Raspbian */
+#  include "mythpainter_ogl.h"
+# endif
 #endif //def OSD_EGL
 
 #include "mythmainwindow.h"
@@ -41,7 +50,6 @@
 #include "videodisplayprofile.h"
 #include "videobuffers.h"
 
-#include "privatedecoder_omx.h" // For PrivateDecoderOMX::s_name
 #include "omxcontext.h"
 using namespace omxcontext;
 

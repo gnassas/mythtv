@@ -1466,6 +1466,17 @@ add_cxxppflags(){
     append CXXPPFLAGS $($cxxppflags_filter "$@")
 }
 
+is_python3() {
+    log is_python3
+    check_cmd $python << EOF
+import sys
+if sys.version_info > (3,0):
+    sys.exit(0)
+else:
+    sys.exit(1)
+EOF
+}
+
 check_python(){
     log check_python
     check_cmd $python <<EOF
@@ -5677,7 +5688,7 @@ found_qmake=''
 for i in $CHECK_QMAKE; do
     if is_qmake5 $i; then
         found_qmake=$i
-        check_cxxflags -DQT_DISABLE_DEPRECATED_BEFORE
+        check_cxxflags -DQT_DISABLE_DEPRECATED_BEFORE=0x050000
         break;
     fi
 done
@@ -6274,7 +6285,7 @@ if ! disabled openmax; then
     check_header 'OMX_Core.h' && enable openmax
 fi
 if ! disabled openmax; then
-    if check_lib 'OMX_Broadcom.h' OMX_Init -lopenmaxil; then
+    if check_lib 'OMX_Broadcom.h' OMX_Init -L/opt/vc/lib -lopenmaxil; then
         enable openmax_broadcom
     elif check_lib 'bellagio/omxcore.h' OMX_Init -lomxil-bellagio; then
         enable openmax_bellagio
@@ -6777,6 +6788,7 @@ int main(void) { IDirectXVideoDecoder *o = NULL; IDirectXVideoDecoder_Release(o)
 EOF
 
 enabled vaapi && enabled opengl &&
+    check_header GL/glx.h &&
     check_lib va/va.h vaInitialize -lva ||
     disable vaapi
 
@@ -6986,7 +6998,7 @@ else
     qt_libs="-L${sysroot}/$(${qmake} -query QT_INSTALL_LIBS)"
 fi
 
-if $(pkg-config --exists QtWebKit) || $(pkg-config --exists Qt5WebKit) ; then
+if $(pkg-config --exists Qt5WebKit) || $(pkg-config --exists QtWebKit) ; then
     enable qtwebkit
 else
     check_ecxx ${qt_inc} ${qt_inc}/QtCore <<EOF && enable qtwebkit
@@ -6997,7 +7009,7 @@ fi
 
 enabled qtwebkit || die "Error! QtWebkit headers not found"
 
-if $(pkg-config --exists QtScript) || $(pkg-config --exists Qt5Script) ; then
+if $(pkg-config --exists Qt5Script) || $(pkg-config --exists QtScript) ; then
     enable qtscript
 else
     check_ecxx ${qt_inc} <<EOF && enable qtscript
@@ -7026,7 +7038,7 @@ EOF
 fi
 
 # Disable OpenGL ES support if Qt does not support it
-QTCONF=$(pkg-config --variable=qt_config QtCore || pkg-config --variable=qt_config Qt5Core)
+QTCONF=$(pkg-config --variable=qt_config Qt5Core || pkg-config --variable=qt_config QtCore)
 if echo "$QTCONF" | grep -qv opengles2 ; then
     if test $target_os != android ; then
         disable opengles
@@ -7353,6 +7365,7 @@ fi
 
 # Check for python dependencies
 if enabled bindings_python; then
+    is_python3                 && python=python2
     check_python               || disable_bindings_python "Python 2.6"
     check_py_lib MySQLdb       || disable_bindings_python "MySQLdb"
     check_py_lib lxml          || disable_bindings_python "lxml"
@@ -7970,7 +7983,7 @@ cat > $TMPH <<EOF
 #define MYTHTV_CONFIG_H
 #define FFMPEG_CONFIGURATION "$(c_escape $FFMPEG_CONFIGURATION)"
 #define FFMPEG_LICENSE "$(c_escape $license)"
-#define CONFIG_THIS_YEAR 2015
+#define CONFIG_THIS_YEAR 2016
 #define FFMPEG_DATADIR "$(eval c_escape $datadir)"
 #define AVCONV_DATADIR "$(eval c_escape $datadir)"
 #define CC_IDENT "$(c_escape ${cc_ident:-Unknown compiler})"

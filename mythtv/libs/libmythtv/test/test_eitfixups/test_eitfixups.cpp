@@ -143,6 +143,14 @@ void printEvent(const DBEventEIT& event, const QString& name)
     printf("SubtitleType   %s\n",  getSubtitleType(event.subtitleType).toLocal8Bit().constData());
     printf("Audio props    %s\n",  getAudioProps(event.audioProps).toLocal8Bit().constData());
     printf("Video props    %s\n",  getVideoProps(event.videoProps).toLocal8Bit().constData());
+    if (event.credits && !event.credits->empty())
+    {
+        printf("Credits      %3zu\n", event.credits->size());
+    }
+    if (!event.items.isEmpty())
+    {
+        printf("Items        %3d\n", event.items.count());
+    }
     printf("\n");
 }
 
@@ -343,7 +351,65 @@ void TestEITFixups::testUKFixups9()
     QCOMPARE(event9.description, QString("Includes sport and weather"));
 }
 
-DBEventEIT *TestEITFixups::SimpleDBEventEIT (uint fixup, QString title, QString subtitle, QString description)
+void TestEITFixups::testUKLawAndOrder()
+{
+    EITFixUp fixup;
+
+    DBEventEIT *event = SimpleDBEventEIT (EITFixUp::kFixUK,
+                                         "Law & Order: Special Victims Unit",
+                                         "",
+                                         "Crime drama series. Detective Cassidy is accused of raping ...");
+
+    PRINT_EVENT(*event);
+    fixup.Fix(*event);
+    PRINT_EVENT(*event);
+    QCOMPARE(event->title,    QString("Law & Order: Special Victims Unit"));
+    QCOMPARE(event->subtitle, QString(""));
+    delete event;
+
+    DBEventEIT *event2 = SimpleDBEventEIT (EITFixUp::kFixUK,
+                                         "Law & Order: Special Victims Unit",
+                                         "",
+                                         "Sugar: New. Police drama series about an elite sex crime  ...");
+
+    PRINT_EVENT(*event2);
+    fixup.Fix(*event2);
+    PRINT_EVENT(*event2);
+    QCOMPARE(event2->title,    QString("Law & Order: Special Victims Unit"));
+    QCOMPARE(event2->subtitle, QString("Sugar"));
+    QCOMPARE(event2->description, QString("Police drama series about an elite sex crime  ..."));
+    delete event2;
+}
+
+void TestEITFixups::testUKMarvel()
+{
+    EITFixUp fixup;
+
+    DBEventEIT *event = SimpleDBEventEIT (EITFixUp::kFixUK,
+                                         "Marvel's Agents of S.H.I.E.L.D.",
+                                         "",
+                                         "");
+
+    PRINT_EVENT(*event);
+    fixup.Fix(*event);
+    PRINT_EVENT(*event);
+    QCOMPARE(event->title,    QString("Marvel's Agents of S.H.I.E.L.D."));
+    delete event;
+
+
+    DBEventEIT *event2 = SimpleDBEventEIT (EITFixUp::kFixUK,
+                                          "NEW: Marvel's Agents of S.H.I.E.L.D.",
+                                          "",
+                                          "");
+
+    PRINT_EVENT(*event2);
+    fixup.Fix(*event2);
+    PRINT_EVENT(*event2);
+    QCOMPARE(event2->title,    QString("Marvel's Agents of S.H.I.E.L.D."));
+    delete event2;
+}
+
+DBEventEIT *TestEITFixups::SimpleDBEventEIT (FixupValue fixup, QString title, QString subtitle, QString description)
 {
     DBEventEIT *event = new DBEventEIT (1, // channel id
                                        title, // title
@@ -365,6 +431,27 @@ DBEventEIT *TestEITFixups::SimpleDBEventEIT (uint fixup, QString title, QString 
                                        0); //episode total
 
     return event;
+}
+
+void TestEITFixups::testUKXFiles()
+{
+    // Make sure numbers don't get misinterpreted as episode number or similar.
+    EITFixUp fixup;
+
+    DBEventEIT event(1005,
+                      "New: The X-Files",
+                      "Hit sci-fi drama series returns. Mulder and Scully are reunited after the collapse of their relationship when a TV host contacts them, believing he has uncovered a significant conspiracy. (Ep 1)[AD,S]",
+                      QDateTime::fromString("2016-02-08T22:00:00Z", Qt::ISODate),
+                      QDateTime::fromString("2016-02-08T23:00:00Z", Qt::ISODate),
+                      EITFixUp::kFixGenericDVB | EITFixUp::kFixUK,
+                      SUB_UNKNOWN,
+                      AUD_STEREO,
+                      VID_UNKNOWN);
+
+    fixup.Fix(event);
+    PRINT_EVENT(event);
+    QCOMPARE(event.title,       QString("The X-Files"));
+    QCOMPARE(event.description, QString("Hit sci-fi drama series returns. Mulder and Scully are reunited after the collapse of their relationship when a TV host contacts them, believing he has uncovered a significant conspiracy. (Ep 1)"));
 }
 
 void TestEITFixups::testDEPro7Sat1()
@@ -433,7 +520,22 @@ void TestEITFixups::testDEPro7Sat1()
     QCOMPARE(event6->subtitle, QString("Drei Kleintiere durchschneiden (1)"));
     QCOMPARE(event6->airdate,  (unsigned short) 2014);
 
-
+    /* #12151 */
+    DBEventEIT *event7 = SimpleDBEventEIT (EITFixUp::kFixP7S1,
+                                           "Criminal Minds",
+                                           "<episode title>, Crime-Serie, USA 2011",
+                                           "<plot summary>\n\n"
+                                           "Regie: Frau Regisseur\n"
+                                           "Drehbuch: Lieschen Mueller, Frau Meier\n\n"
+                                           "Darsteller:\n"
+                                           "Herr Schauspieler (in einer (kleinen) Rolle)\n"
+                                           "Frau Schauspielerin (in einer Rolle)");
+    PRINT_EVENT(*event7);
+    fixup.Fix(*event7);
+    PRINT_EVENT(*event7);
+    QCOMPARE(event7->subtitle, QString("<episode title>"));
+    QCOMPARE(event7->airdate,  (unsigned short) 2011);
+    QCOMPARE(event7->description, QString("<plot summary>"));
 }
 
 void TestEITFixups::testHTMLFixup()
@@ -530,6 +632,36 @@ void TestEITFixups::testSkyEpisodes()
     QCOMPARE(event3->description, QString("Ab 12 Jahren"));
     QCOMPARE(event3->season,  0u);
     QCOMPARE(event3->episode, 0u);
+}
+
+void TestEITFixups::testUnitymedia()
+{
+    EITFixUp fixup;
+
+    DBEventEIT *event = SimpleDBEventEIT (EITFixUp::kFixUnitymedia,
+                                         "Titel",
+                                         "Beschreib",
+                                         "Beschreibung ... IMDb Rating: 8.9 /10");
+    QMap<QString,QString> cast;
+    cast.insertMulti ("Role Player", "Great Actor");
+    cast.insertMulti ("Role Player", "Other Actor");
+    cast.insertMulti ("Director", "Great Director");
+    cast.insertMulti ("Unhandled", "lets fix it up");
+    event->items = cast;
+
+    QVERIFY(!event->HasCredits());
+    QCOMPARE(event->items.count(), 4);
+
+    PRINT_EVENT(*event);
+    fixup.Fix(*event);
+    PRINT_EVENT(*event);
+
+    QVERIFY(event->HasCredits());
+    QCOMPARE(event->credits->size(), (size_t)3);
+    QVERIFY(event->subtitle.isEmpty());
+    QCOMPARE(event->description, QString("Beschreibung ..."));
+    QCOMPARE(event->stars, 0.89f);
+    QCOMPARE(event->items.count(), 1);
 }
 
 QTEST_APPLESS_MAIN(TestEITFixups)
