@@ -360,8 +360,10 @@ using_frontend {
         SOURCES += videoout_omx.cpp
         contains( HAVE_OPENMAX_BROADCOM, yes ) {
             DEFINES += OMX_SKIP64BIT USING_BROADCOM
-            #LIBS += -lopenmaxil
+            # Raspbian
             QMAKE_CXXFLAGS += -isystem /opt/vc/include -isystem /opt/vc/include/IL -isystem /opt/vc/include/interface/vcos/pthreads -isystem /opt/vc/include/interface/vmcs_host/linux
+            # Ubuntu
+            QMAKE_CXXFLAGS += -isystem /usr/include/IL -isystem /usr/include/interface/vcos/pthreads -isystem /usr/include/interface/vmcs_host/linux
             LIBS += -L/opt/vc/lib -lopenmaxil
         }
         contains( HAVE_OPENMAX_BELLAGIO, yes ) {
@@ -884,6 +886,8 @@ LIBS += -L../../external/FFmpeg/libavutil
 LIBS += -L../../external/FFmpeg/libavcodec
 LIBS += -L../../external/FFmpeg/libavformat
 LIBS += -L../../external/FFmpeg/libswscale
+LIBS += -L../../external/FFmpeg/libpostproc
+LIBS += -L../../external/FFmpeg/libavfilter
 LIBS += -L../libmythui -L../libmythupnp
 LIBS += -L../libmythbase
 LIBS += -L../libmythservicecontracts
@@ -892,6 +896,8 @@ LIBS += -lmythswscale
 LIBS += -lmythavformat
 LIBS += -lmythavcodec
 LIBS += -lmythavutil
+LIBS += -lmythpostproc
+LIBS += -lmythavfilter
 LIBS += -lmythui-$$LIBVERSION       -lmythupnp-$$LIBVERSION
 LIBS += -lmythbase-$$LIBVERSION
 LIBS += -lmythservicecontracts-$$LIBVERSION
@@ -909,6 +915,8 @@ LIBS += $$EXTRA_LIBS $$QMAKE_LIBS_DYNLOAD
     POST_TARGETDEPS += ../../external/FFmpeg/libavcodec/$$avLibName(avcodec)
     POST_TARGETDEPS += ../../external/FFmpeg/libavformat/$$avLibName(avformat)
     POST_TARGETDEPS += ../../external/FFmpeg/libswscale/$$avLibName(swscale)
+    POST_TARGETDEPS += ../../external/FFmpeg/libpostproc/$$avLibName(postproc)
+    POST_TARGETDEPS += ../../external/FFmpeg/libavfilter/$$avLibName(avfilter)
 
     using_mheg: POST_TARGETDEPS += ../libmythfreemheg/libmythfreemheg-$${MYTH_SHLIB_EXT}
     using_live: POST_TARGETDEPS += ../libmythlivemedia/libmythlivemedia-$${MYTH_SHLIB_EXT}
