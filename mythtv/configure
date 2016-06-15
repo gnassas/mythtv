@@ -5409,6 +5409,7 @@ case $target_os in
         # Workaround compile errors from missing u_int/uint def
         CPPFLAGS=`echo $CPPFLAGS | sed 's/-D_POSIX_C_SOURCE=200112//'`
         disable ivtv
+        disable v4l2
         enable backend
         ;;
     bsd/os)
@@ -6520,17 +6521,26 @@ check_type "vdpau/vdpau.h" "VdpPictureInfoHEVC"
 check_cpp_condition windows.h "!WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)" && enable winrt || disable winrt
 
 # check for OpenMAX header & lib
-if ! disabled openmax; then
-    check_header 'OMX_Core.h' && enable openmax
+if  enabled openmax ; then
+    openmax_was_enabled=Y
 fi
 if ! disabled openmax; then
-    if check_lib 'OMX_Broadcom.h' OMX_Init -L/opt/vc/lib -lopenmaxil; then
+    test -f /opt/vc/include/IL/OMX_Core.h && enable openmax
+fi
+if ! disabled openmax; then
+    if test -f /opt/vc/include/IL/OMX_Broadcom.h \
+        && test -f /opt/vc/lib/libopenmaxil.so ; then
         enable openmax_broadcom
-    elif check_lib 'bellagio/omxcore.h' OMX_Init -lomxil-bellagio; then
+    elif test -f /usr/include/bellagio/omxcore.h \
+        && test -f /usr/lib/libomxil-bellagio.so; then
         enable openmax_bellagio
     else
         disable openmax
     fi
+fi
+
+if  test "$openmax_was_enabled" = "Y" && disabled openmax ; then
+    die "ERROR - Unable to enable openmax"
 fi
 
 if ! disabled w32threads && ! enabled pthreads; then
@@ -7241,11 +7251,13 @@ int main(void) { return 1; }
 EOF
 
 if enabled systemd_notify ; then
-   if check_pkg_config libsystemd-daemon systemd/sd-daemon.h sd_notify ; then
+    if check_pkg_config libsystemd-daemon systemd/sd-daemon.h sd_notify ; then
         require_pkg_config libsystemd-daemon systemd/sd-daemon.h sd_notify
-   else
+    elif check_pkg_config libsystemd systemd/sd-daemon.h sd_notify ; then
+        require_pkg_config libsystemd systemd/sd-daemon.h sd_notify
+    else
         disable systemd_notify
-   fi
+    fi
 fi
 
 # Check that all MythTV build "requirements" are met:
@@ -7347,7 +7359,10 @@ enabled libfftw3 && check_lib2 fftw3.h fftw_init_threads -lfftw3_threads -lfftw3
 enabled libass && check_lib2 ass/ass.h ass_flush_events -lass || disable libass
 
 if enabled libcec ; then
-    check_cxx -I"$libcec_path" <<EOF || { disable libcec; }
+    if pkg-config --exists libcec; then
+        libcec_path=`pkg-config --variable includedir libcec`
+    else
+        check_cxx -I"$libcec_path" <<EOF || { disable libcec; }
 #include <libcec/cec.h>
 #include <iostream>
 using namespace std;
@@ -7361,6 +7376,7 @@ int main(void) {
     return 1;
 }
 EOF
+    fi
 fi
 
 enabled libcrypto && check_lib openssl/rsa.h RSA_new -lcrypto || disable libcrypto
@@ -8023,10 +8039,15 @@ if enabled x11 ; then
   echo "VAAPI support             ${vaapi-no}"
   echo "CrystalHD support         ${crystalhd-no}"
   echo "OpenMAX support           ${openmax-no}"
+  if enabled openmax ; then
+    echo "OpenMAX Broadcom          ${openmax_broadcom-no}"
+    echo "OpenMAX Bellagio          ${openmax_bellagio-no}"
+  fi
 fi
   echo "OpenGL video              ${opengl_video-no}"
   if test x"$target_os" = x"darwin" ; then
     echo "VDA support               ${vda-no}"
+    echo "VideoToolBox support      ${videotoolbox-no}"
   fi
   if test x"$target_os" = x"mingw32" ; then
     echo "Windows (Direct3D)        yes"
@@ -8038,16 +8059,22 @@ fi
 fi
 
 echo "# Misc Features"
+echo "Frontend                  ${frontend-no}"
+echo "Backend                   ${backend-no}"
+echo "mythlogserver             ${mythlogserver-no}"
 echo "multi threaded libavcodec ${threads-no}"
 if enabled frontend; then
   echo "libxml2 support           ${libxml2-no} [$libxml2_path]"
 fi
 echo "libdns_sd (Bonjour)       ${libdns_sd-no}"
 echo "libcrypto                 ${libcrypto-no}"
-echo "Frontend                  ${frontend-no}"
-echo "Backend                   ${backend-no}"
+if test x"$target_os" = x"darwin" ; then
+  echo "TLS -"
+  echo "OpenSSL                   ${tls_openssl_protocol-no}"
+  echo "gnutls                    ${tls_gnutls_protocol-no}"
+  echo "Secure Transport          ${tls_securetransport_protocol-no}"
+fi
 echo "OpenGL ES 2.0             ${opengles-no}"
-echo "mythlogserver             ${mythlogserver-no}"
 echo "BD-J (Bluray java)        ${bdjava-no}"
 echo "BD-J type                 ${bdj_type}"
 echo "systemd_notify            ${systemd_notify-no}"
@@ -8067,6 +8094,7 @@ echo "mp3lame                   ${libmp3lame-no}"
 echo "faac                      ${libfaac-no}"
 echo "xvid                      ${libxvid-no}"
 echo "x264                      ${libx264-no}"
+echo "x265 (HEVC)               ${libx265-no}"
 echo "vpx                       ${libvpx-no}"
 echo "SDL                       ${sdl-no}"
 echo ""

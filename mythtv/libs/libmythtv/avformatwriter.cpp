@@ -316,7 +316,7 @@ int AVFormatWriter::WriteVideoFrame(VideoFrame *frame)
     frame->timecode = tc + m_startingTimecodeOffset;
     m_framesWritten++;
 
-    av_free_packet(&pkt);
+    av_packet_unref(&pkt);
 
     return 1;
 }
@@ -427,7 +427,7 @@ int AVFormatWriter::WriteAudioFrame(unsigned char *buf, int fnum, long long &tim
                 "av_interleaved_write_frame couldn't write Audio");
     timecode = tc + m_startingTimecodeOffset;
 
-    av_free_packet(&pkt);
+    av_packet_unref(&pkt);
 
     return 1;
 }
@@ -733,7 +733,7 @@ AVFrame* AVFormatWriter::AllocPicture(enum AVPixelFormat pix_fmt)
     if (!picture_buf)
     {
         LOG(VB_RECORD, LOG_ERR, LOC + "AllocPicture(): av_malloc() failed");
-        av_free(picture);
+        av_frame_free(&picture);
         return NULL;
     }
     avpicture_fill((AVPicture *)picture, picture_buf,

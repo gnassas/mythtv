@@ -26,6 +26,7 @@
 #include "mythdownloadmanager.h"
 #include "musicmetadata.h"
 
+#include "enums/recStatus.h"
 
 bool LogCleanerTask::DoRun(void)
 {
@@ -381,14 +382,14 @@ bool ThemeUpdateTask::DoRun(void)
     else
     {
 
-        MythVersion = MYTH_BINARY_VERSION; // Example: 0.25.20101017-1
+        MythVersion = MYTH_BINARY_VERSION; // Example: 29.20161017-1
         MythVersion.replace(QRegExp("\\.[0-9]{8,}.*"), "");
         LOG(VB_GENERAL, LOG_INFO,
             QString("Loading themes for %1").arg(MythVersion));
         result |= LoadVersion(MythVersion, LOG_ERR);
 
         // If a version of the theme for this tag exists, use it...
-        QRegExp subexp("v[0-9]+.[0-9]+.([0-9]+)-*");
+        QRegExp subexp("v[0-9]+\\.([0-9]+)-*");
         int pos = subexp.indexIn(MYTH_SOURCE_VERSION);
         if (pos > -1)
         {
@@ -512,6 +513,9 @@ RadioStreamUpdateTask::~RadioStreamUpdateTask(void)
 
 bool RadioStreamUpdateTask::DoCheckRun(QDateTime now)
 {
+    // we are only interested in the global setting so remove any local host setting just in case
+    GetMythDB()->ClearSetting("MusicStreamListModified");
+
     // check we are not already running a radio stream update
     if (gCoreContext->GetSetting("MusicStreamListModified") == "Updating" &&
             PeriodicHouseKeeperTask::DoCheckRun(now))

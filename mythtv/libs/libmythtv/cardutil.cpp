@@ -731,6 +731,30 @@ vector<uint> CardUtil::GetChildInputIDs(uint inputid)
     return list;
 }
 
+uint CardUtil::GetRecLimit(uint inputid)
+{
+    if (!inputid)
+        return 1;
+
+    MSqlQuery query(MSqlQuery::InitCon());
+    QString qstr =
+        "SELECT reclimit "
+        "FROM capturecard "
+        "WHERE cardid = :INPUTID";
+
+    query.prepare(qstr);
+    query.bindValue(":INPUTID", inputid);
+
+    uint reclimit = 0;
+
+    if (!query.exec())
+        MythDB::DBError("CardUtil::GetRecLimit()", query);
+    else if (query.next())
+        reclimit = query.value(0).toUInt();
+
+    return reclimit;
+}
+
 static uint clone_capturecard(uint src_inputid, uint orig_dst_inputid)
 {
     uint dst_inputid = orig_dst_inputid;
@@ -787,7 +811,7 @@ static uint clone_capturecard(uint src_inputid, uint orig_dst_inputid)
         "       externalcommand,       changer_device,        changer_model,   "
         "       tunechan,              startchan,             displayname,     "
         "       dishnet_eit,           recpriority,           quicktune,       "
-        "       schedorder,            livetvorder "
+        "       schedorder,            livetvorder,           reclimit "
         "FROM capturecard "
         "WHERE cardid = :INPUTID");
     query.bindValue(":INPUTID", src_inputid);
@@ -831,10 +855,11 @@ static uint clone_capturecard(uint src_inputid, uint orig_dst_inputid)
         "    recpriority           = :V22, "
         "    quicktune             = :V23, "
         "    schedorder            = :V24, "
-        "    livetvorder           = :V25,  "
+        "    livetvorder           = :V25, "
+        "    reclimit              = :V26, "
         "    parentid              = :PARENTID "
         "WHERE cardid = :INPUTID");
-    for (uint i = 0; i < 26; ++i)
+    for (uint i = 0; i < 27; ++i)
         query2.bindValue(QString(":V%1").arg(i), query.value(i).toString());
     query2.bindValue(":INPUTID", dst_inputid);
     query2.bindValue(":PARENTID", src_inputid);
@@ -960,7 +985,8 @@ bool CardUtil::GetInputInfo(InputInfo &input, vector<uint> *groupids)
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare("SELECT "
                   "inputname, sourceid, livetvorder, "
-                  "schedorder, displayname, recpriority, quicktune "
+                  "schedorder, displayname, recpriority, quicktune, "
+                  "reclimit "
                   "FROM capturecard "
                   "WHERE cardid = :INPUTID");
     query.bindValue(":INPUTID", input.inputid);
@@ -981,6 +1007,7 @@ bool CardUtil::GetInputInfo(InputInfo &input, vector<uint> *groupids)
     input.displayName = query.value(4).toString();
     input.recPriority = query.value(5).toInt();
     input.quickTune = query.value(6).toBool();
+    input.reclimit = query.value(7).toUInt();
 
     if (input.displayName.isEmpty())
         input.displayName = QObject::tr("Input %1:%2")
@@ -999,7 +1026,8 @@ QList<InputInfo> CardUtil::GetAllInputInfo()
     MSqlQuery query(MSqlQuery::InitCon());
     query.prepare("SELECT cardid, "
                   "inputname, sourceid, livetvorder, "
-                  "schedorder, displayname, recpriority, quicktune "
+                  "schedorder, displayname, recpriority, quicktune, "
+                  "reclimit "
                   "FROM capturecard");
 
     if (!query.exec())
@@ -1019,6 +1047,7 @@ QList<InputInfo> CardUtil::GetAllInputInfo()
         input.displayName = query.value(5).toString();
         input.recPriority = query.value(6).toInt();
         input.quickTune = query.value(7).toBool();
+        input.reclimit = query.value(8).toUInt();
 
         infoInputList.push_back(input);
     }
@@ -1028,7 +1057,7 @@ QList<InputInfo> CardUtil::GetAllInputInfo()
 
 QString CardUtil::GetInputName(uint inputid)
 {
-    InputInfo info("None", 0, inputid, 0, 0, 0);
+    InputInfo info("None", 0, inputid, 0, 0, 0, 0);
     GetInputInfo(info);
     return info.name;
 }
@@ -2157,7 +2186,7 @@ QString CardUtil::GetVBoxdesc(const QString &id, const QString &ip,
 
     if (!vbox->checkVersion(version))
     {
-        QString apiVersionErr = QObject::tr("The VBox software version is to old (%1), we require %2")
+        QString apiVersionErr = QObject::tr("The VBox software version is too old (%1), we require %2")
                                             .arg(version).arg(VBOX_MIN_API_VERSION);
         delete vbox;
         return apiVersionErr;

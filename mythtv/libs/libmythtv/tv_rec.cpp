@@ -96,6 +96,7 @@ TVRec::TVRec(int _inputid)
       audioSampleRateDB(0),
       overRecordSecNrml(0),         overRecordSecCat(0),
       overRecordCategory(""),
+      recLimit(0),
       // Configuration variables from setup rutines
       inputid(_inputid), ispip(false),
       // State variables
@@ -173,6 +174,7 @@ bool TVRec::Init(void)
     overRecordSecNrml = gCoreContext->GetNumSetting("RecordOverTime");
     overRecordSecCat  = gCoreContext->GetNumSetting("CategoryOverTime") * 60;
     overRecordCategory= gCoreContext->GetSetting("OverTimeCategory");
+    recLimit = CardUtil::GetRecLimit(inputid);
 
     eventThread->start();
 
@@ -1437,9 +1439,30 @@ void TVRec::run(void)
             }
             else
             {
-                scanner->StartActiveScan(this, eitTransportTimeout);
-                SetFlags(kFlagEITScannerRunning, __FILE__, __LINE__);
-                eitScanStartTime = MythDate::current().addYears(1);
+                // Check if another card in the same input group is
+                // busy.  This could be either virtual DVB-devices or
+                // a second tuner on a single card
+                bool allow_eit = true;
+                vector<uint> inputids =
+                    CardUtil::GetConflictingInputs(inputid);
+                InputInfo busy_input;
+                for (uint i = 0; i < inputids.size() && allow_eit; ++i)
+                    allow_eit = !RemoteIsBusy(inputids[i], busy_input);
+                if (allow_eit)
+                {
+                    scanner->StartActiveScan(this, eitTransportTimeout);
+                    SetFlags(kFlagEITScannerRunning, __FILE__, __LINE__);
+                    eitScanStartTime =
+                        QDateTime::currentDateTime().addYears(1);
+                }
+                else
+                {
+                    LOG(VB_CHANNEL, LOG_INFO, LOC + QString(
+                            "Postponing EIT scan on input %1 "
+                            "because input %2 is busy")
+                        .arg(inputid).arg(busy_input.inputid));
+                    eitScanStartTime = eitScanStartTime.addSecs(300);
+                }
             }
         }
 
@@ -2497,6 +2520,7 @@ bool TVRec::IsBusy(InputInfo *busy_input, int time_buffer) const
         busy_input->mplexid = ChannelUtil::GetMplexID(busy_input->chanid);
         busy_input->mplexid =
             (32767 == busy_input->mplexid) ? 0 : busy_input->mplexid;
+        busy_input->reclimit = recLimit;
     }
 
     return busy_input->inputid;
