@@ -799,6 +799,7 @@ ProgramInfo::ProgramInfo(
         }
 
         if (s.recstatus == RecStatus::WillRecord ||
+            s.recstatus == RecStatus::Pending ||
             s.recstatus == RecStatus::Recording ||
             s.recstatus == RecStatus::Tuning ||
             s.recstatus == RecStatus::Failing)
@@ -1336,6 +1337,28 @@ bool ProgramInfo::QueryKeyFromPathname(
     }
 
     return ExtractKeyFromPathname(pathname, chanid, recstartts);
+}
+
+bool ProgramInfo::QueryRecordedIdFromPathname(const QString &pathname,
+                                              uint &recordedid)
+{
+    QString basename = pathname.section('/', -1);
+    if (basename.isEmpty())
+        return false;
+
+    MSqlQuery query(MSqlQuery::InitCon());
+    query.prepare(
+        "SELECT recordedid "
+        "FROM recorded "
+        "WHERE basename = :BASENAME");
+    query.bindValue(":BASENAME", basename);
+    if (query.exec() && query.next())
+    {
+        recordedid = query.value(0).toUInt();
+        return true;
+    }
+
+    return false;
 }
 
 #define INT_TO_LIST(x)       do { list << QString::number(x); } while (0)
@@ -4004,7 +4027,7 @@ static const char *from_filemarkup_mark_desc =
     " WHERE filename = :PATH"
     " AND type = :TYPE"
     " AND offset <= :QUERY_ARG"
-    " ORDER BY filename DESC, type DESC, mark DESC LIMIT 1;";    
+    " ORDER BY filename DESC, type DESC, mark DESC LIMIT 1;";
 static const char *from_recordedseek_mark_asc =
     "SELECT offset,mark FROM recordedseek"
     " WHERE chanid = :CHANID"
@@ -6020,7 +6043,8 @@ bool GetNextRecordingList(QDateTime &nextRecordingStart,
     ProgramList::const_iterator it = progList.begin();
     for (; it != progList.end(); ++it)
     {
-        if (((*it)->GetRecordingStatus() == RecStatus::WillRecord) &&
+        if (((*it)->GetRecordingStatus() == RecStatus::WillRecord ||
+             (*it)->GetRecordingStatus() == RecStatus::Pending) &&
             (nextRecordingStart.isNull() ||
              nextRecordingStart > (*it)->GetRecordingStartTime()))
         {
@@ -6034,7 +6058,8 @@ bool GetNextRecordingList(QDateTime &nextRecordingStart,
     // save the details of the earliest recording(s)
     for (it = progList.begin(); it != progList.end(); ++it)
     {
-        if (((*it)->GetRecordingStatus()    == RecStatus::WillRecord) &&
+        if (((*it)->GetRecordingStatus()    == RecStatus::WillRecord ||
+             (*it)->GetRecordingStatus()    == RecStatus::Pending) &&
             ((*it)->GetRecordingStartTime() == nextRecordingStart))
         {
             list->push_back(ProgramInfo(**it));

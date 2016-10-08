@@ -241,6 +241,7 @@ class MTV_PUBLIC CardUtil
     static bool         DeleteCard(uint inputid);
     static bool         DeleteAllCards(void);
     static vector<uint> GetInputList(void);
+    static vector<uint> GetSchedInputList(void);
     static vector<uint> GetLiveTVInputList(void);
 
     /// Convenience function for GetInputIDs()
@@ -259,7 +260,6 @@ class MTV_PUBLIC CardUtil
 
     static uint         GetChildInputCount(uint inputid);
     static vector<uint> GetChildInputIDs(uint inputid);
-    static uint         GetRecLimit(uint inputid);
 
     static bool         IsInputTypePresent(const QString &rawtype,
                                            QString hostname = QString::null);

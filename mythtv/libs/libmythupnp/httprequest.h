@@ -3,10 +3,10 @@
 // Created     : Oct. 21, 2005
 //
 // Purpose     : Http Request/Response
-//                                                                            
+//
 // Copyright (c) 2005 David Blain <dblain@mythtv.org>
-//                                          
-// Licensed under the GPL v2 or later, see COPYING for details                    
+//
+// Licensed under the GPL v2 or later, see COPYING for details
 //
 //////////////////////////////////////////////////////////////////////////////
 
@@ -36,7 +36,7 @@
 // Typedefs / Defines
 /////////////////////////////////////////////////////////////////////////////
 
-typedef enum 
+typedef enum
 {
     RequestTypeUnknown      = 0x0000,
     // HTTP 1.1
@@ -56,9 +56,9 @@ typedef enum
     // Not a request type
     RequestTypeResponse     = 0x1000
 
-} RequestType;                
+} RequestType;
 
-typedef enum 
+typedef enum
 {
     ContentType_Unknown    = 0,
     ContentType_Urlencoded = 1,
@@ -66,7 +66,7 @@ typedef enum
 
 } ContentType;
 
-typedef enum 
+typedef enum
 {
     ResponseTypeNone     = -1,
     ResponseTypeUnknown  =  0,
@@ -99,7 +99,7 @@ class IPostProcess
 };
 
 /////////////////////////////////////////////////////////////////////////////
-// 
+//
 /////////////////////////////////////////////////////////////////////////////
 
 class UPNP_PUBLIC HTTPRequest
@@ -111,13 +111,14 @@ class UPNP_PUBLIC HTTPRequest
         QRegExp             m_procReqLineExp;
         QRegExp             m_parseRangeExp;
 
-    public:    
-        
+    public:
+
         RequestType         m_eType;
         ContentType         m_eContentType;
 
         QString             m_sRawRequest; // e.g. GET /foo/bar.html HTTP/1.1
 
+        QString             m_sOriginalUrl; // Raw request URL before % decoded
         QString             m_sRequestUrl; // Raw request URL
         QString             m_sBaseUrl; // Path section of URL, without parameters
         QString             m_sResourceUrl; // Duplicate of Base URL!?
@@ -175,9 +176,9 @@ class UPNP_PUBLIC HTTPRequest
         QString         GetResponseType     ( void );
         QString         GetResponseHeaders  ( void );
 
-        bool            ParseRange          ( QString sRange, 
-                                              long long   llSize, 
-                                              long long *pllStart, 
+        bool            ParseRange          ( QString sRange,
+                                              long long   llSize,
+                                              long long *pllStart,
                                               long long *pllEnd   );
 
         bool            ParseKeepAlive      ( void );
@@ -198,16 +199,17 @@ class UPNP_PUBLIC HTTPRequest
 
         bool            BasicAuthentication ();
         bool            DigestAuthentication ();
+        void            AddCORSHeaders ( const QString &sOrigin );
 
     public:
-        
+
                         HTTPRequest     ();
         virtual        ~HTTPRequest     () {};
 
         bool            ParseRequest    ();
 
-        void            FormatErrorResponse ( bool  bServerError, 
-                                              const QString &sFaultString, 
+        void            FormatErrorResponse ( bool  bServerError,
+                                              const QString &sFaultString,
                                               const QString &sDetails );
 
         void            FormatActionResponse( Serializer *ser );
@@ -265,17 +267,17 @@ class UPNP_PUBLIC HTTPRequest
 };
 
 /////////////////////////////////////////////////////////////////////////////
-// 
+//
 /////////////////////////////////////////////////////////////////////////////
 
 class BufferedSocketDeviceRequest : public HTTPRequest
 {
-    public:    
+    public:
 
         QTcpSocket    *m_pSocket;
 
     public:
-        
+
         explicit BufferedSocketDeviceRequest( QTcpSocket *pSocket );
         virtual ~BufferedSocketDeviceRequest() {};
 
@@ -290,7 +292,7 @@ class BufferedSocketDeviceRequest : public HTTPRequest
 };
 
 /////////////////////////////////////////////////////////////////////////////
-// 
+//
 /////////////////////////////////////////////////////////////////////////////
 
 class UPNP_PUBLIC HttpException
@@ -299,12 +301,12 @@ class UPNP_PUBLIC HttpException
         int     code;
         QString msg;
 
-        HttpException( int nCode = -1, const QString &sMsg = "") 
-               : code( nCode ), msg ( sMsg  ) 
+        HttpException( int nCode = -1, const QString &sMsg = "")
+               : code( nCode ), msg ( sMsg  )
         {}
 
         // Needed to force a v-table.
-        virtual ~HttpException() 
+        virtual ~HttpException()
         {}
 };
 
@@ -315,13 +317,13 @@ class UPNP_PUBLIC HttpRedirectException : public HttpException
         QString hostName;
       //int     port;
 
-        HttpRedirectException( const QString &sHostName = "", 
-                                     int      nCode     = -1, 
-                               const QString &sMsg      = "" ) 
+        HttpRedirectException( const QString &sHostName = "",
+                                     int      nCode     = -1,
+                               const QString &sMsg      = "" )
                : HttpException( nCode, sMsg ), hostName( sHostName )
         {}
 
-        virtual ~HttpRedirectException() 
+        virtual ~HttpRedirectException()
         {}
 
 };

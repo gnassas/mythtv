@@ -1154,7 +1154,8 @@ static int internal_play_media(const QString &mrl, const QString &plot,
     if ((!checkFile.exists() && !mrl.startsWith("dvd:")
          && !mrl.startsWith("bd:")
          && !mrl.startsWith("myth:")
-         && !mrl.startsWith("http://")))
+         && !mrl.startsWith("http://")
+         && !mrl.startsWith("https://")))
     {
         QString errorText = qApp->translate("(MythFrontendMain)",
             "Failed to open \n '%1' in %2 \n"
@@ -1623,7 +1624,8 @@ static bool WasAutomaticStart(void)
                     ProgramList::const_iterator it = progList.begin();
                     for (; it != progList.end(); ++it)
                     {
-                        if (((*it)->GetRecordingStatus() == RecStatus::WillRecord) &&
+                        if (((*it)->GetRecordingStatus() == RecStatus::WillRecord ||
+                             (*it)->GetRecordingStatus() == RecStatus::Pending) &&
                             ((*it)->GetHostname() == hostname) &&
                             (nextRecordingStart.isNull() ||
                              nextRecordingStart > (*it)->GetRecordingStartTime()))

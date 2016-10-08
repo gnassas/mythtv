@@ -15,10 +15,10 @@ class MTV_PUBLIC InputInfo
     InputInfo() : name(QString::null),
                   sourceid(0), inputid(0), mplexid(0),
                   chanid(0), recPriority(0), scheduleOrder(0),
-                  livetvorder(0), quickTune(false), reclimit(0) {}
+                  livetvorder(0), quickTune(false) {}
     InputInfo(const QString &name,
               uint sourceid, uint inputid, uint mplexid,
-              uint chanid, uint livetvorder, uint reclimit);
+              uint chanid, uint livetvorder);
 
     InputInfo(const InputInfo &other) :
         name(other.name),
@@ -30,8 +30,7 @@ class MTV_PUBLIC InputInfo
         recPriority(other.recPriority),
         scheduleOrder(other.scheduleOrder),
         livetvorder(other.livetvorder),
-        quickTune(other.quickTune),
-        reclimit(other.reclimit)
+        quickTune(other.quickTune)
     {
         name.detach();
     }
@@ -49,7 +48,6 @@ class MTV_PUBLIC InputInfo
         scheduleOrder = other.scheduleOrder;
         livetvorder = other.livetvorder;
         quickTune = other.quickTune;
-        reclimit = other.reclimit;
         return *this;
     }
 
@@ -79,7 +77,6 @@ class MTV_PUBLIC InputInfo
     uint    scheduleOrder;
     uint    livetvorder; ///< order for live TV use
     bool    quickTune;
-    uint    reclimit;
 };
 
 #endif // _INPUTINFO_H_

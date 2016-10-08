@@ -497,6 +497,7 @@ void MainServer::ProcessRequestWork(MythSocket *sock)
     line = line.simplified();
     QStringList tokens = line.split(' ', QString::SkipEmptyParts);
     QString command = tokens[0];
+
     if (command == "MYTH_PROTO_VERSION")
     {
         if (tokens.size() < 2)
@@ -1268,6 +1269,37 @@ void MainServer::customEvent(QEvent *e)
             }
 
             m_sched->GetNextLiveTVDir(tokens[1].toInt());
+            return;
+        }
+
+        if (me->Message().startsWith("STOP_RECORDING"))
+        {
+            QStringList tokens = me->Message().split(" ",
+                                                     QString::SkipEmptyParts);
+
+
+            if (tokens.size() < 3 || tokens.size() > 3)
+            {
+                LOG(VB_GENERAL, LOG_ERR, LOC +
+                    QString("Bad STOP_RECORDING message: %1")
+                        .arg(me->Message()));
+                return;
+            }
+
+            QDateTime startts = MythDate::fromString(tokens[2]);
+            RecordingInfo recInfo(tokens[1].toUInt(), startts);
+
+            if (recInfo.GetChanID())
+            {
+                DoHandleStopRecording(recInfo, NULL);
+            }
+            else
+            {
+                LOG(VB_GENERAL, LOG_ERR, LOC +
+                    QString("Cannot find program info for '%1' while "
+                            "attempting to stop recording.").arg(me->Message()));
+            }
+
             return;
         }
 
@@ -3103,17 +3135,12 @@ void MainServer::DoHandleUndeleteRecording(
 void MainServer::HandleRescheduleRecordings(const QStringList &request,
                                             PlaybackSock *pbs)
 {
-    QStringList result;
-    if (m_sched)
-    {
-        m_sched->Reschedule(request);
-        result = QStringList( QString::number(1) );
-    }
-    else
-        result = QStringList( QString::number(0) );
+     ScheduledRecording::RescheduleMatch(0, 0, 0, QDateTime(),
+                                         "HandleRescheduleRecordings");
 
     if (pbs)
     {
+        QStringList result  = QStringList( QString::number(1) );
         MythSocket *pbssock = pbs->getSocket();
         if (pbssock)
             SendResponse(pbssock, result);
@@ -4191,12 +4218,10 @@ void MainServer::HandleGetFreeInputInfo(PlaybackSock *pbs,
         if (info.inputid != excluded_input && elink->IsBusy(&busyinfo))
         {
             LOG(VB_CHANNEL, LOG_DEBUG,
-                LOC + QString("Input %1 is busy on %2/%3/%4")
-                .arg(info.inputid).arg(busyinfo.chanid)
-                .arg(busyinfo.mplexid).arg(busyinfo.reclimit));
+                LOC + QString("Input %1 is busy on %2/%3")
+                .arg(info.inputid).arg(busyinfo.chanid).arg(busyinfo.mplexid));
             info.chanid = busyinfo.chanid;
             info.mplexid = busyinfo.mplexid;
-            info.reclimit = busyinfo.reclimit;
             busyinputs.push_back(info);
         }
         else if (info.livetvorder)
@@ -4230,13 +4255,11 @@ void MainServer::HandleGetFreeInputInfo(PlaybackSock *pbs,
             if (busyinfo.sourceid == freeinfo.sourceid)
             {
                 LOG(VB_CHANNEL, LOG_DEBUG,
-                    LOC + QString("Input %1 is limited to %2/%3/%4 by input %5")
+                    LOC + QString("Input %1 is limited to %2/%3 by input %4")
                     .arg(freeinfo.inputid).arg(busyinfo.chanid)
-                    .arg(busyinfo.mplexid).arg(busyinfo.reclimit)
-                    .arg(busyinfo.inputid));
+                    .arg(busyinfo.mplexid).arg(busyinfo.inputid));
                 freeinfo.chanid = busyinfo.chanid;
                 freeinfo.mplexid = busyinfo.mplexid;
-                freeinfo.reclimit = busyinfo.reclimit;
                 ++freeiter;
                 continue;
             }
@@ -4254,9 +4277,9 @@ void MainServer::HandleGetFreeInputInfo(PlaybackSock *pbs,
     for (uint i = 0; i < freeinputs.size(); ++i)
     {
         LOG(VB_CHANNEL, LOG_INFO,
-            LOC + QString("Input %1 is available on %2/%3/%4")
+            LOC + QString("Input %1 is available on %2/%3")
             .arg(freeinputs[i].inputid).arg(freeinputs[i].chanid)
-            .arg(freeinputs[i].mplexid).arg(freeinputs[i].reclimit));
+            .arg(freeinputs[i].mplexid));
         freeinputs[i].ToStringList(strlist);
     }
 
@@ -8121,4 +8144,3 @@ void MainServer::SendSlaveDisconnectedEvent(
 }
 
 /* vim: set expandtab tabstop=4 shiftwidth=4: */
-

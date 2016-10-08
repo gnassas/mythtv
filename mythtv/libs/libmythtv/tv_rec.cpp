@@ -96,7 +96,6 @@ TVRec::TVRec(int _inputid)
       audioSampleRateDB(0),
       overRecordSecNrml(0),         overRecordSecCat(0),
       overRecordCategory(""),
-      recLimit(0),
       // Configuration variables from setup rutines
       inputid(_inputid), ispip(false),
       // State variables
@@ -174,7 +173,6 @@ bool TVRec::Init(void)
     overRecordSecNrml = gCoreContext->GetNumSetting("RecordOverTime");
     overRecordSecCat  = gCoreContext->GetNumSetting("CategoryOverTime") * 60;
     overRecordCategory= gCoreContext->GetSetting("OverTimeCategory");
-    recLimit = CardUtil::GetRecLimit(inputid);
 
     eventThread->start();
 
@@ -431,7 +429,8 @@ RecStatus::Type TVRec::StartRecording(ProgramInfo *pginfo)
 
     // We need to do this check early so we don't cancel an overrecord
     // that we're trying to extend.
-    if (internalState != kState_WatchingLiveTV && m_recStatus != RecStatus::Failing &&
+    if (internalState != kState_WatchingLiveTV &&
+        m_recStatus != RecStatus::Failing &&
         curRecording && curRecording->IsSameProgramWeakCheck(*rcinfo))
     {
         int post_roll_seconds  = curRecording->GetRecordingEndTime()
@@ -2520,7 +2519,6 @@ bool TVRec::IsBusy(InputInfo *busy_input, int time_buffer) const
         busy_input->mplexid = ChannelUtil::GetMplexID(busy_input->chanid);
         busy_input->mplexid =
             (32767 == busy_input->mplexid) ? 0 : busy_input->mplexid;
-        busy_input->reclimit = recLimit;
     }
 
     return busy_input->inputid;
@@ -4327,6 +4325,23 @@ void TVRec::TuningNewRecorder(MPEGStreamData *streamData)
   err_ret:
     SetRecordingStatus(RecStatus::Failed, __LINE__, true);
     ChangeState(kState_None);
+
+    if (rec)
+    {
+        // Make sure the scheduler knows...
+        rec->SetRecordingStatus(RecStatus::Failed);
+        LOG(VB_RECORD, LOG_INFO, LOC +
+            QString("TuningNewRecorder -- UPDATE_RECORDING_STATUS: %1")
+            .arg(RecStatus::toString(RecStatus::Failed, kSingleRecord)));
+        MythEvent me(QString("UPDATE_RECORDING_STATUS %1 %2 %3 %4 %5")
+                     .arg(rec->GetInputID())
+                     .arg(rec->GetChanID())
+                     .arg(rec->GetScheduledStartTime(MythDate::ISODate))
+                     .arg(RecStatus::Failed)
+                     .arg(rec->GetRecordingEndTime(MythDate::ISODate)));
+        gCoreContext->dispatch(me);
+    }
+
     if (tvchain)
         delete rec;
 }
