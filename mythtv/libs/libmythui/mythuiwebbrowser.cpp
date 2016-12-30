@@ -35,6 +35,7 @@
 #include <QKeyEvent>
 #include <QDomDocument>
 #include <QNetworkCookieJar>
+#include <QNetworkConfiguration>
 
 #include <unistd.h> // for usleep()
 
@@ -108,6 +109,10 @@ static QNetworkAccessManager *GetNetworkAccessManager(void)
         return networkManager;
 
     networkManager = new MythNetworkAccessManager();
+//  This next line prevents seg fault at program exit in
+//  QNetworkConfiguration::~QNetworkConfiguration()
+//  when destructor is called by DestroyNetworkAccessManager
+    networkManager->setConfiguration(networkManager->configuration());
     LOG(VB_GENERAL, LOG_DEBUG, "Copying DLManager's Cookie Jar");
     GetMythDownloadManager()->loadCookieJar(GetConfDir() + "/MythBrowser/cookiejar.txt");
     networkManager->setCookieJar(GetMythDownloadManager()->copyCookieJar());
